@@ -2,6 +2,7 @@ import os
 import openai
 import logging
 from aiogram import Bot, Dispatcher, types
+from aiogram.types import Message
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiogram.client.default import DefaultBotProperties
 from aiohttp import web
