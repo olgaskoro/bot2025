@@ -1,28 +1,28 @@
 import os
 import openai
 import logging
-import asyncio
-from aiogram import Bot, Dispatcher
-from aiogram.types import Message
-from aiogram.filters import Command
+from aiogram import Bot, Dispatcher, types
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiogram.client.default import DefaultBotProperties
+from aiohttp import web
+from aiogram.filters import Command
+from dotenv import load_dotenv
 
-# Загружаем токены из переменных окружения
+load_dotenv()
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-print("TELEGRAM_TOKEN:", TELEGRAM_TOKEN)
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_HOST = os.getenv("RENDER_EXTERNAL_URL") or "https://твой-домен.onrender.com"
+WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
-# Настраиваем логирование
 logging.basicConfig(level=logging.INFO)
 
-# Инициализируем бота с новыми параметрами
 bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 
-# Инициализация клиента OpenAI
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-# Описание роли бота
 PSYCHOLOGIST_PROMPT = """
 You are a professional psychologist with many years of experience:: 
 Your job is to provide friendly, supportive, and meaningful responses:: 
@@ -32,9 +32,8 @@ avoid interruptions mid-sentence, keep the meaning within 500 tokens:: Answer in
 """
 
 async def ask_chatgpt(user_message: str) -> str:
-    """Отправляет запрос в ChatGPT и возвращает ответ."""
     try:
-        response = client.chat.completions.create(  # Новый способ вызова OpenAI API
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": PSYCHOLOGIST_PROMPT},
@@ -48,23 +47,28 @@ async def ask_chatgpt(user_message: str) -> str:
         return "Извините, произошла ошибка. Попробуйте позже."
 
 @dp.message(Command("start"))
-async def start(message: Message):
-    """Обрабатывает команду /start"""
-    await message.answer(
-        "Привет! Я психолог-бот. Задай мне вопрос, и я помогу тебе разобраться в себе 😊"
-    )
+async def start(message: types.Message):
+    await message.answer("Привет! Я психолог-бот. Задай мне вопрос, и я помогу тебе 😊")
 
 @dp.message()
-async def handle_message(message: Message):
-    """Обрабатывает сообщения пользователей и отвечает с помощью ChatGPT."""
-    user_text = message.text.strip()
-    response = await ask_chatgpt(user_text)
+async def handle_message(message: types.Message):
+    response = await ask_chatgpt(message.text)
     await message.answer(response)
 
-async def main():
-    """Запуск бота в асинхронном режиме."""
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+async def on_startup(app: web.Application):
+    await bot.set_webhook(WEBHOOK_URL)
+
+async def on_shutdown(app: web.Application):
+    await bot.delete_webhook()
+
+def main():
+    app = web.Application()
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+    web.run_app(app, port=int(os.environ.get("PORT", 10000)))
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
