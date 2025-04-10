@@ -51,15 +51,17 @@ async def start(message: types.Message):
     await message.answer("Привет! Я психолог-бот. Задай мне вопрос, и я помогу тебе 😊")
 
 @dp.message()
-@dp.message()
-async def handle_message(message: types.Message):
+async def handle_message(message: Message):
+    user_text = message.text.strip()
+    logging.info(f"Получено сообщение: {user_text}")  # <— добавили лог
     try:
-        response = await ask_chatgpt(message.text)
+        response = await ask_chatgpt(user_text)
+        logging.info(f"Ответ от OpenAI: {response}")  # <— добавили лог
         await message.answer(response)
     except Exception as e:
-        import logging
-        logging.error(f"Ошибка при обработке сообщения: {e}")
-        await message.answer(f"Ой! Что-то пошло не так 🙈\nОшибка: {e}")
+        logging.error(f"Ошибка в handle_message: {e}")
+        await message.answer("Произошла ошибка. Попробуй ещё раз позже 🙏")
+
 
 async def on_startup(app: web.Application):
     await bot.set_webhook(WEBHOOK_URL)
